@@ -1,10 +1,10 @@
 # Course notes that answer with the next deadline
 
-This small service connects two steps: embed course notes, then use the retrieved lesson for both a learner-facing deadline report and an educator note from chat.completions. It uses Infrai through the OpenAI-compatible `base_url`, so one `INFRAI_API_KEY` covers both calls without changing the Python client shape.
+We run retrieval and reporting as two steps: embed course notes, then use the matched lesson to drive both a learner deadline report and an educator note from chat.completions. Infrai is used via the OpenAI-compatible `base_url`, so one `INFRAI_API_KEY` pays for both calls and the Python client stays unchanged. In prod I've been paged by duplicate deliveries when this handoff wasn't idempotent; keep the single source of truth.
 
 ## The working path
 
-`src/course_delivery.py` keeps the domain objects deliberately plain. `CourseDocument` carries the course text and its deadline. `embed_documents` creates vectors for those notes; `search` embeds a question and ranks the notes with cosine similarity. `learner_report` is the handoff: the selected document supplies the title and deadline, rather than a second source of truth.
+`src/course_delivery.py` keeps the domain objects deliberately plain. `CourseDocument` carries the course text and its deadline. `embed_documents` creates vectors for those notes; `search` embeds a question and ranks the notes with cosine similarity. `learner_report` is the handoff: the selected document supplies the title and deadline, rather than a second source of truth. If this ran on a cron, I'd make the report write idempotent by keying on the note id.
 
 The runnable example asks “How do I test a function?” and should print:
 
@@ -28,7 +28,7 @@ pytest -q
 
 ## A founder's trade-off
 
-I kept the index in memory because this example is about the handoff between retrieval and reporting. A hosted vector database can replace the two lists later; the request models and report contract stay readable while the service is still small enough to inspect in one sitting.
+I kept the index in memory because this example is about the handoff between retrieval and reporting. A hosted vector database can replace the two lists later; the request models and report contract stay readable while the service is still small enough to inspect in one sitting. Postmortem note: if jobs back up, the in-memory store loses state on restart, so treat it as volatile.
 
 ## License
 
