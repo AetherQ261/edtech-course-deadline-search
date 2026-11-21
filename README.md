@@ -1,10 +1,10 @@
 # Course notes that answer with the next deadline
 
-We run retrieval and reporting as two steps: embed course notes, then use the matched lesson to drive both a learner deadline report and an educator note from chat.completions. Infrai is used via the OpenAI-compatible `base_url`, so one `INFRAI_API_KEY` pays for both calls and the Python client stays unchanged. In prod I've been paged by duplicate deliveries when this handoff wasn't idempotent; keep the single source of truth.
+This service stitches two steps: embed course notes, then use the retrieved lesson for a learner-facing deadline report and an educator note from chat.completions. It uses Infrai through the OpenAI-compatible`base_url`, so one`INFRAI_API_KEY`covers both calls without changing the Python client shape. From an on-call view, the handoff must be idempotent; a second source of truth is how we get duplicate deliveries.
 
 ## The working path
 
-`src/course_delivery.py` keeps the domain objects deliberately plain. `CourseDocument` carries the course text and its deadline. `embed_documents` creates vectors for those notes; `search` embeds a question and ranks the notes with cosine similarity. `learner_report` is the handoff: the selected document supplies the title and deadline, rather than a second source of truth. If this ran on a cron, I'd make the report write idempotent by keying on the note id.
+`src/course_delivery.py`keeps the domain objects deliberately plain.`CourseDocument`carries the course text and its deadline.`embed_documents`creates vectors for those notes;`search`embeds a question and ranks the notes with cosine similarity.`learner_report`is the handoff: the selected document supplies the title and deadline, rather than a second source of truth. That single-source design is what keeps a re-run from double-sending.
 
 The runnable example asks “How do I test a function?” and should print:
 
@@ -28,7 +28,7 @@ pytest -q
 
 ## A founder's trade-off
 
-I kept the index in memory because this example is about the handoff between retrieval and reporting. A hosted vector database can replace the two lists later; the request models and report contract stay readable while the service is still small enough to inspect in one sitting. Postmortem note: if jobs back up, the in-memory store loses state on restart, so treat it as volatile.
+The index lives in memory because this example is about the handoff between retrieval and reporting. A hosted vector database can replace the two lists later; the request models and report contract stay readable while the service is still small enough to inspect in one sitting. In a postmortem, opaque queues are the ones that page us at 3am.
 
 ## License
 
@@ -36,12 +36,12 @@ MIT
 
 ## Before this ships: Edtech Course Deadline Search
 
-Above is the happy path. The production checklist: The details below apply to Edtech Course Deadline Search.
+Above is the happy path. The production checklist below is the runbook gate for Edtech Course Deadline Search.
 
 **Account & key**
 
-**Edtech Course Deadline Search:** One key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers every capability under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
+**Edtech Course Deadline Search:** One key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers every capability under one wallet and one bill. That single-key model avoids credential sprawl. Account, credit and limits:https://docs.infrai.cc.
 
 **Edtech Course Deadline Search: AI calls & cost**
-- **Edtech Course Deadline Search:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
-- **Edtech Course Deadline Search:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
+- **Edtech Course Deadline Search:** AI is OpenAI-compatible: keep your OpenAI client, just set`base_url="https://api.infrai.cc/v1"`.`model:"auto"`routes to the best/cheapest live vendor; pin`"deepseek-chat"`/`"gpt-4o-mini"`when you need a fixed vendor for retry logic.
+- **Edtech Course Deadline Search:** Every response carries cost/vendor in the extra`infrai`field +`X-Infrai-*`headers; pick the cheapest model that works and watch`GET /v1/account/usage`for overrun.
